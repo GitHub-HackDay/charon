@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config({ path: '../mcp-server/.env' });
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -209,11 +211,16 @@ app.get('/rest/api/3/search', (req, res) => {
     if (startMatch) startDate = startMatch[1];
     if (endMatch) endDate = endMatch[1];
   }
+  
   let filtered = mockIssues;
-  if (startDate && endDate) {
+  if (startDate || endDate) {
     filtered = mockIssues.filter(issue => {
       const created = issue.fields.created;
-      return created >= startDate && created <= endDate;
+      const createdDate = new Date(created);
+      const start = startDate ? new Date(startDate) : new Date('1900-01-01');
+      const end = endDate ? new Date(endDate) : new Date();
+      
+      return createdDate >= start && createdDate <= end;
     });
   }
   res.json({ issues: filtered });
@@ -222,8 +229,21 @@ app.get('/rest/api/3/search', (req, res) => {
 // API for frontend
 app.post('/api/tickets', async (req, res) => {
   const { startDate, endDate } = req.body;
-  // Simulate JQL query
-  const jql = `created >= "${startDate}" AND created <= "${endDate}"`;
+  
+  let jql;
+  if (!startDate && !endDate) {
+    // Default to past month if no dates provided
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const formattedDate = oneMonthAgo.toISOString().split('T')[0];
+    jql = `created >= "${formattedDate}"`;
+  } else {
+    // Use provided dates
+    const start = startDate || '1900-01-01';
+    const end = endDate || new Date().toISOString().split('T')[0];
+    jql = `created >= "${start}" AND created <= "${end}"`;
+  }
+  
   // Call local mock endpoint
   const response = await fetch(`http://localhost:4000/rest/api/3/search?jql=${encodeURIComponent(jql)}`);
   const data = await response.json();
@@ -321,6 +341,198 @@ ${topCauses.map(([cause, count]) => `• ${cause}: ${count} incidents (${Math.ro
 // Polyfill fetch for Node.js
 if (!global.fetch) {
   global.fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+}
+
+// NLP Query endpoint with OpenAI integration
+app.post('/api/query-nlp', async (req, res) => {
+  try {
+    const { query } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    console.log(`Processing NLP query: "${query}"`);
+    
+    // Call OpenAI API for intelligent filtering
+    const filteredTickets = await filterTicketsWithLLM(query, mockIssues);
+    
+    res.json({
+      query: query,
+      tickets: filteredTickets,
+      count: filteredTickets.length
+    });
+  } catch (error) {
+    console.error('Error processing NLP query:', error);
+    
+    // Fallback to keyword filtering if LLM fails
+    console.log('Falling back to keyword-based filtering...');
+    const filteredTickets = simulateNLPFilter(query, mockIssues);
+    
+    res.json({
+      query: query,
+      tickets: filteredTickets,
+      count: filteredTickets.length,
+      note: 'Used fallback filtering due to LLM error'
+    });
+  }
+});
+
+// LLM-powered ticket filtering
+async function filterTicketsWithLLM(query, tickets) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  
+  if (!apiKey) {
+    console.log('No OpenAI API key found, using fallback filtering');
+    return simulateNLPFilter(query, tickets);
+  }
+
+  try {
+    const prompt = `You are an expert Jira ticket analyst. Given a natural language query, analyze the provided tickets and return ONLY the ticket IDs that match the query intent.
+
+Query: "${query}"
+
+Tickets to analyze:
+${tickets.map(ticket => `
+ID: ${ticket.id}
+Key: ${ticket.key}
+Summary: ${ticket.fields.summary}
+Status: ${ticket.fields.status.name}
+Root Cause: ${ticket.fields.rootCause}
+Created: ${ticket.fields.created}
+---`).join('')}
+
+Instructions:
+- Understand the intent behind the query (e.g., "security issues" should match tickets with security vulnerabilities)
+- Consider status, severity, technology keywords, time references, etc.
+- Return ONLY a JSON array of ticket IDs that match
+- Be precise but not overly restrictive
+- Example response: ["13", "18", "9"]
+
+Response (JSON array only):`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a precise ticket filtering system. Always respond with a valid JSON array of ticket IDs that match the user query. No explanations, just the JSON array.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(`OpenAI API error: ${data.error.message}`);
+    }
+
+    const content = data.choices[0].message.content.trim();
+    console.log('LLM response:', content);
+    
+    // Parse the LLM response
+    let matchingIds;
+    try {
+      // Try to parse as JSON array
+      matchingIds = JSON.parse(content);
+      if (!Array.isArray(matchingIds)) {
+        throw new Error('Response is not an array');
+      }
+    } catch (parseError) {
+      console.log('Failed to parse LLM response as JSON, extracting IDs manually');
+      // Fallback: extract numbers from the response
+      const idMatches = content.match(/\d+/g);
+      matchingIds = idMatches ? [...new Set(idMatches)] : [];
+    }
+    
+    console.log('Matching ticket IDs:', matchingIds);
+    
+    // Filter tickets based on LLM's selection
+    const filteredTickets = tickets.filter(ticket => 
+      matchingIds.includes(ticket.id) || matchingIds.includes(String(ticket.id))
+    );
+    
+    console.log(`Filtered ${filteredTickets.length} tickets from ${tickets.length} total`);
+    return filteredTickets;
+    
+  } catch (error) {
+    console.error('LLM filtering error:', error);
+    throw error;
+  }
+}
+
+// Simple keyword-based filtering (fallback for when MCP is not available)
+function simulateNLPFilter(query, tickets) {
+  const lowerQuery = query.toLowerCase();
+  
+  // Check for status keywords
+  if (lowerQuery.includes('critical') || lowerQuery.includes('urgent')) {
+    return tickets.filter(ticket => 
+      ticket.fields.status.name.toLowerCase().includes('critical') ||
+      ticket.fields.status.name.toLowerCase().includes('urgent')
+    );
+  }
+  
+  if (lowerQuery.includes('open') || lowerQuery.includes('new')) {
+    return tickets.filter(ticket => 
+      ticket.fields.status.name.toLowerCase().includes('open') ||
+      ticket.fields.status.name.toLowerCase().includes('new')
+    );
+  }
+  
+  if (lowerQuery.includes('in progress') || lowerQuery.includes('progress')) {
+    return tickets.filter(ticket => 
+      ticket.fields.status.name.toLowerCase().includes('progress')
+    );
+  }
+  
+  // Check for technology keywords
+  if (lowerQuery.includes('security')) {
+    return tickets.filter(ticket => 
+      ticket.fields.summary.toLowerCase().includes('security') ||
+      ticket.fields.rootCause.toLowerCase().includes('security')
+    );
+  }
+  
+  if (lowerQuery.includes('memory') || lowerQuery.includes('java')) {
+    return tickets.filter(ticket => 
+      ticket.fields.summary.toLowerCase().includes('memory') ||
+      ticket.fields.rootCause.toLowerCase().includes('memory') ||
+      ticket.fields.summary.toLowerCase().includes('java') ||
+      ticket.fields.rootCause.toLowerCase().includes('java')
+    );
+  }
+  
+  if (lowerQuery.includes('network') || lowerQuery.includes('connection')) {
+    return tickets.filter(ticket => 
+      ticket.fields.summary.toLowerCase().includes('network') ||
+      ticket.fields.summary.toLowerCase().includes('connection') ||
+      ticket.fields.rootCause.toLowerCase().includes('network')
+    );
+  }
+  
+  // General text search in summary and root cause
+  return tickets.filter(ticket => 
+    ticket.fields.summary.toLowerCase().includes(lowerQuery) ||
+    ticket.fields.rootCause.toLowerCase().includes(lowerQuery)
+  );
 }
 
 app.listen(4000, () => {

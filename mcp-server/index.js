@@ -65,6 +65,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['tickets'],
         },
       },
+      {
+        name: 'query_jira_tickets_nlp',
+        description: 'Query Jira tickets using natural language and convert to structured filters',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Natural language query for filtering tickets (e.g., "Show me critical security issues from last week")'
+            },
+            tickets: {
+              type: 'array',
+              description: 'Array of all available Jira tickets to filter from',
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string' },
+                  fields: {
+                    type: 'object',
+                    properties: {
+                      summary: { type: 'string' },
+                      status: { 
+                        type: 'object',
+                        properties: {
+                          name: { type: 'string' }
+                        }
+                      },
+                      created: { type: 'string' },
+                      rootCause: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          required: ['query', 'tickets'],
+        },
+      },
     ],
   };
 });
@@ -127,6 +165,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
+  if (name === 'query_jira_tickets_nlp') {
+    try {
+      const { query, tickets } = args;
+      
+      const filteredTickets = await filterTicketsWithNLP(query, tickets);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              filteredTickets: filteredTickets,
+              count: filteredTickets.length,
+              query: query
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error filtering tickets: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   throw new Error(`Unknown tool: ${name}`);
 });
 
@@ -159,6 +228,56 @@ Please provide an analysis that includes:
 5. **Priority Focus Areas**: What should leadership prioritize to address these systemic issues?
 
 Format your response as a clear, executive-level summary suitable for senior management. Use bullet points and clear headings. Keep the tone professional and action-oriented.`;
+}
+
+async function filterTicketsWithNLP(query, tickets) {
+  try {
+    const prompt = `Given this natural language query: "${query}"
+
+Analyze these service desk tickets and return only those that match the query intent.
+
+Tickets to analyze:
+${tickets.map(ticket => `
+ID: ${ticket.key}
+Summary: ${ticket.fields.summary}
+Status: ${ticket.fields.status.name}
+Root Cause: ${ticket.fields.rootCause}
+Description: ${ticket.fields.description}
+Created: ${ticket.fields.created}
+---`).join('')}
+
+Return ONLY a JSON array of ticket keys that match the query. For example: ["HELP-1", "HELP-3"]
+Do not include any explanation, just the JSON array.`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "You are a precise ticket filtering system. Analyze the user's natural language query and return only the ticket keys that match the intent. Always respond with a valid JSON array of strings."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.1,
+    });
+
+    const response = completion.choices[0].message.content.trim();
+    const matchingKeys = JSON.parse(response);
+    
+    // Filter the actual tickets based on the keys returned by AI
+    const filteredTickets = tickets.filter(ticket => 
+      matchingKeys.includes(ticket.key)
+    );
+
+    return filteredTickets;
+  } catch (error) {
+    console.error('Error in NLP filtering:', error);
+    throw error;
+  }
 }
 
 async function main() {
