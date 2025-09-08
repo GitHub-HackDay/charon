@@ -1,0 +1,8 @@
+- [x] Clarify Project Requirements: Build a web console to query Jira Service Desk tickets for a time window.
+- [x] Scaffold the Project: Created backend, frontend, and .github directories.
+- [ ] Customize the Project: Implement backend API and frontend UI.
+- [ ] Install Required Extensions: None required.
+- [ ] Compile the Project: Pending after implementation.
+- [ ] Create and Run Task: Pending after implementation.
+- [ ] Launch the Project: Pending after implementation.
+- [x] Ensure Documentation is Complete: README.md created.
