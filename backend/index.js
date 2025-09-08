@@ -1184,19 +1184,92 @@ app.post('/api/executive-summary', async (req, res) => {
   const { tickets } = req.body;
   
   try {
-    // For demo purposes, return a mock summary
-    // In production, this would call the MCP server
-    const mockSummary = generateMockExecutiveSummary(tickets);
+    console.log('🎯 Generating GitHub Copilot-friendly executive summary for', tickets.length, 'tickets');
     
-    // Simulate processing time
-    setTimeout(() => {
-      res.json({ summary: mockSummary });
-    }, 2000);
+    // Use OpenAI to generate GitHub Copilot-friendly issue descriptions
+    const summary = await generateAIExecutiveSummary(tickets);
+    
+    res.json({ summary });
     
   } catch (error) {
-    res.status(500).json({ error: 'Failed to generate executive summary' });
+    console.error('❌ Executive summary generation failed:', error.message);
+    // Fallback to mock summary if OpenAI fails
+    const mockSummary = generateMockExecutiveSummary(tickets);
+    res.json({ summary: mockSummary });
   }
 });
+
+async function generateAIExecutiveSummary(tickets) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  // Prepare ticket data for analysis
+  const ticketSummaries = tickets.map(ticket => ({
+    key: ticket.key,
+    summary: ticket.fields.summary,
+    status: ticket.fields.status.name,
+    rootCause: ticket.fields.rootCause,
+    description: ticket.fields.description
+  }));
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a technical documentation expert specializing in creating GitHub Copilot-friendly issue descriptions. 
+
+Your task is to analyze Jira Service Desk tickets and generate:
+
+1. **Executive Summary**: High-level business impact and themes
+2. **Individual Issue Descriptions**: Technical descriptions optimized for GitHub Copilot that include:
+   - Clear problem statement
+   - Technical context and root cause
+   - Suggested implementation approach
+   - Related code patterns or frameworks
+   - Keywords that help Copilot understand the domain
+
+Format each issue description to be immediately useful for a developer using GitHub Copilot to fix the problem. Include specific technical terms, frameworks, and implementation hints.
+
+Use markdown formatting for readability.`
+          },
+          {
+            role: 'user',
+            content: `Analyze these ${tickets.length} service desk tickets and provide an executive summary plus GitHub Copilot-optimized issue descriptions:
+
+${JSON.stringify(ticketSummaries, null, 2)}
+
+Generate:
+1. Executive summary with business impact
+2. Individual issue descriptions that will help GitHub Copilot suggest relevant code fixes`
+          }
+        ],
+        max_tokens: 3000,
+        temperature: 0.3
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+
+  } catch (error) {
+    console.error('🔥 OpenAI request failed:', error);
+    throw error;
+  }
+}
 
 function generateMockExecutiveSummary(tickets) {
   const totalTickets = tickets.length;
