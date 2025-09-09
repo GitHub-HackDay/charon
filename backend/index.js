@@ -1372,9 +1372,392 @@ ${topCauses.map(([cause, count]) => `• ${cause}: ${count} incidents (${Math.ro
 • Establish weekly progress reviews until issues are resolved`;
 }
 
+// Enhanced operational issue profiles mapping
+const operationalIssueProfiles = {
+  'JSD-141': {
+    investigationContext: {
+      technicalEnvironment: 'System experiencing memory leaks due to improperly unmapped memory mapped files in Linux/Unix environments with high file I/O operations.',
+      potentialRootCauses: [
+        'Incorrect file handling after use - files opened with mmap() but never unmapped with munmap()',
+        'Inefficient memory management in native code interfacing with Java applications',
+        'Resource cleanup not implemented in exception handling paths',
+        'Multiple threads accessing memory-mapped files without proper synchronization'
+      ],
+      systemArchitecture: 'Multi-tier application with native libraries, file processing components, and memory-intensive operations',
+      crossSystemDependencies: ['File I/O subsystem', 'Virtual memory manager', 'Native library interfaces', 'Garbage collection system']
+    },
+    copilotDiscoveryPrompts: [
+      'How does the system manage memory mapping and deallocation processes across different native libraries?',
+      'What are the implications of not properly unmapping memory mapped files on overall system performance?',
+      'Explore different strategies for efficient memory management in file operations across programming languages',
+      'Consider the impact of memory leaks on system performance and scalability in containerized environments'
+    ],
+    technicalArchaeology: [
+      'Investigate memory mapping APIs (mmap, munmap) usage patterns in codebase',
+      'Analyze memory allocation patterns using tools like Valgrind, AddressSanitizer',
+      'Check for memory leak detection tools integration (LeakCanary, JProfiler, VisualVM)',
+      'Monitor virtual memory usage trends and identify bottlenecks in memory-mapped file operations'
+    ],
+    contextualKnowledgeWeb: [
+      'Memory mapping techniques in modern operating systems and their trade-offs',
+      'Best practices for memory management in file operations across different frameworks',
+      'Common memory leak patterns and mitigation strategies in multi-language applications',
+      'Impact of memory leaks on system stability, performance, and container orchestration'
+    ]
+  },
+  'JSD-132': {
+    investigationContext: {
+      technicalEnvironment: 'Java application with JNI integrations experiencing native memory leaks outside JVM heap management.',
+      potentialRootCauses: [
+        'Native code not properly releasing allocated memory through malloc/free cycles',
+        'JNI reference leaks preventing garbage collection of Java objects',
+        'Incorrect use of NewGlobalRef without corresponding DeleteGlobalRef calls',
+        'Native libraries with memory allocation bugs not visible to JVM memory management'
+      ],
+      systemArchitecture: 'Hybrid Java/native application with C/C++ libraries integrated via JNI',
+      crossSystemDependencies: ['JVM heap management', 'Native memory allocators', 'JNI bridge layer', 'System memory management']
+    },
+    copilotDiscoveryPrompts: [
+      'How does JNI handle memory allocation and deallocation between Java and native code boundaries?',
+      'What are the risks associated with native memory leaks in JVM environments and how do they differ from heap leaks?',
+      'Explore strategies for efficient memory management in JNI integrations across different platforms',
+      'Consider the impact of native memory leaks on system reliability, monitoring, and debugging approaches'
+    ],
+    technicalArchaeology: [
+      'Review JNI memory management practices using JNI reference checking tools',
+      'Analyze native memory allocation patterns with Valgrind, AddressSanitizer for C/C++ code',
+      'Investigate JVM native memory tracking flags (-XX:NativeMemoryTracking)',
+      'Monitor native memory usage separate from JVM heap using system monitoring tools'
+    ],
+    contextualKnowledgeWeb: [
+      'JNI memory management best practices and common pitfalls in enterprise applications',
+      'JVM memory management strategies and garbage collection impact on native code',
+      'Common issues with native memory leaks in Java applications and debugging techniques',
+      'Impact of native memory leaks on JVM stability, performance monitoring, and containerization'
+    ]
+  },
+  'JSD-164': {
+    investigationContext: {
+      technicalEnvironment: 'Linux system unable to create swap files due to insufficient space on root partition, affecting memory management.',
+      potentialRootCauses: [
+        'Root partition filled with log files, temporary files, or application data',
+        'Swap file configuration attempting to allocate more space than available',
+        'Disk space monitoring and cleanup procedures not functioning properly',
+        'Application generating excessive temporary files without cleanup'
+      ],
+      systemArchitecture: 'Linux server with swap file management, disk space monitoring, and application workloads',
+      crossSystemDependencies: ['Virtual memory subsystem', 'Disk space management', 'Log management system', 'Application temporary file handling']
+    },
+    copilotDiscoveryPrompts: [
+      'How does the system handle swap file creation and disk space management during memory pressure?',
+      'What are the consequences of running out of space on the root partition for system operations?',
+      'Explore strategies for optimizing disk space usage and managing swap files in containerized environments',
+      'Consider the impact of disk space constraints on system stability, performance, and recovery procedures'
+    ],
+    technicalArchaeology: [
+      'Review disk space monitoring tools configuration and alerting thresholds',
+      'Analyze swap file creation processes and disk space allocation algorithms',
+      'Investigate system resource utilization patterns and disk space consumption trends',
+      'Monitor disk space usage patterns across different partitions and mount points'
+    ],
+    contextualKnowledgeWeb: [
+      'Best practices for disk space management and swap file utilization in production systems',
+      'System failure scenarios due to disk space constraints and recovery procedures',
+      'Common issues with swap file creation and root partition management in containerized environments',
+      'Impact of disk space limitations on system reliability, performance, and scalability'
+    ]
+  }
+  // Additional profiles would be added here for other issues
+};
+
 // Polyfill fetch for Node.js
 if (!global.fetch) {
   global.fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+}
+
+// Operational Issue Discovery API endpoint
+app.get('/api/operational-issues', (req, res) => {
+  try {
+    // Filter tickets to only show the key operational issues mentioned in the investigation
+    const keyOperationalIssues = [
+      'JSD-141', 'JSD-132', 'JSD-164', 'JSD-119', 'JSD-129', 
+      'JSD-142', 'JSD-138', 'JSD-135', 'JSD-143', 'JSD-136'
+    ];
+    
+    const operationalTickets = mockIssues.filter(ticket => 
+      keyOperationalIssues.includes(ticket.key)
+    );
+    
+    // Enrich tickets with investigation profiles
+    const enrichedTickets = operationalTickets.map(ticket => ({
+      ...ticket,
+      investigationProfile: operationalIssueProfiles[ticket.key] || {
+        investigationContext: {
+          technicalEnvironment: 'Standard enterprise environment requiring investigation',
+          potentialRootCauses: ['Multiple factors may contribute to this issue'],
+          systemArchitecture: 'Standard multi-tier architecture',
+          crossSystemDependencies: ['Various system components']
+        },
+        copilotDiscoveryPrompts: [
+          'How can this issue be investigated systematically?',
+          'What diagnostic approaches would be most effective?',
+          'What system components should be examined?'
+        ],
+        technicalArchaeology: [
+          'Review system logs and configuration files',
+          'Analyze performance metrics and resource usage',
+          'Investigate related system components'
+        ],
+        contextualKnowledgeWeb: [
+          'Industry best practices for similar issues',
+          'Common resolution patterns',
+          'Prevention strategies'
+        ]
+      }
+    }));
+    
+    res.json({
+      summary: {
+        totalOperationalIssues: enrichedTickets.length,
+        criticalIssues: enrichedTickets.filter(t => t.fields.status.name === 'Critical').length,
+        categories: {
+          memoryLeaks: enrichedTickets.filter(t => t.fields.summary.toLowerCase().includes('memory')).length,
+          securityVulnerabilities: enrichedTickets.filter(t => 
+            t.fields.summary.toLowerCase().includes('security') || 
+            t.fields.summary.toLowerCase().includes('vulnerability') ||
+            t.fields.summary.toLowerCase().includes('injection')
+          ).length,
+          systemFailures: enrichedTickets.filter(t => 
+            t.fields.summary.toLowerCase().includes('system') ||
+            t.fields.summary.toLowerCase().includes('crash') ||
+            t.fields.summary.toLowerCase().includes('overflow')
+          ).length
+        }
+      },
+      issues: enrichedTickets
+    });
+  } catch (error) {
+    console.error('Error fetching operational issues:', error);
+    res.status(500).json({ error: 'Failed to fetch operational issues' });
+  }
+});
+
+// Enhanced Executive Summary with GitHub Copilot optimization focus
+app.post('/api/copilot-optimized-summary', async (req, res) => {
+  const { tickets } = req.body;
+  
+  try {
+    console.log('🎯 Generating GitHub Copilot-optimized investigative summary for', tickets.length, 'tickets');
+    
+    // Use OpenAI to generate comprehensive investigative documentation
+    const summary = await generateCopilotOptimizedSummary(tickets);
+    
+    res.json({ summary });
+    
+  } catch (error) {
+    console.error('❌ Copilot-optimized summary generation failed:', error.message);
+    // Fallback to enhanced mock summary
+    const mockSummary = generateEnhancedMockSummary(tickets);
+    res.json({ summary: mockSummary });
+  }
+});
+
+async function generateCopilotOptimizedSummary(tickets) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || apiKey === 'your_openai_api_key_here') {
+    console.log('⚠️  No valid OpenAI API key - using enhanced mock summary');
+    return generateEnhancedMockSummary(tickets);
+  }
+
+  // Prepare comprehensive ticket analysis
+  const ticketAnalysis = tickets.map(ticket => {
+    const profile = operationalIssueProfiles[ticket.key];
+    return {
+      key: ticket.key,
+      summary: ticket.fields.summary,
+      status: ticket.fields.status.name,
+      rootCause: ticket.fields.rootCause,
+      description: ticket.fields.description,
+      hasInvestigationProfile: !!profile,
+      investigationContext: profile?.investigationContext || null
+    };
+  });
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a senior technical architect and GitHub Copilot optimization expert specializing in operational issue discovery and investigation. Your mission is to create comprehensive, investigative-friendly issue documentation that empowers GitHub Copilot to conduct deep technical analysis and provide intelligent code suggestions.
+
+**CORE PHILOSOPHY**: Create rich, contextual documentation that enables Copilot's reasoning engine to understand complex technical scenarios and generate optimal solutions.
+
+**DOCUMENTATION STRATEGY**:
+1. **Executive Summary**: Business impact with technical depth
+2. **Investigative Issue Profiles**: Detailed analysis encouraging exploration
+3. **GitHub Copilot Discovery Prompts**: Questions that guide intelligent code investigation
+4. **Technical Archaeology**: Framework-specific investigation areas
+5. **Contextual Knowledge Web**: Technology relationships and best practices
+
+**VERBOSITY REQUIREMENTS**:
+- Use detailed explanations (4-6 sentences minimum per section)
+- Include multiple technical perspectives and solution pathways
+- Provide rich context for Copilot's code suggestion engine
+- Encourage exploration and investigation over prescription
+- Add specific technical terminology and framework references
+
+Generate comprehensive investigative documentation using clear markdown formatting.`
+          },
+          {
+            role: 'user',
+            content: `As a senior technical architect, analyze these ${tickets.length} operational service desk tickets and create COMPREHENSIVE, GITHUB COPILOT-OPTIMIZED documentation for investigating and resolving these critical system issues.
+
+**Operational Tickets Analysis:**
+${JSON.stringify(ticketAnalysis, null, 2)}
+
+**Required Output Format:**
+
+## Executive Summary
+[Comprehensive business and technical impact analysis]
+
+## Investigative Issue Profiles
+
+### [Issue Key]: [Summary]
+#### Investigation Context:
+[Detailed technical environment description with multiple root cause scenarios]
+
+#### Copilot Discovery Prompts:
+[Open-ended technical questions for code investigation and solution development]
+
+#### Technical Archaeology:
+[Framework-specific investigation areas and code exploration strategies]
+
+#### Contextual Knowledge Web:
+[Related technologies, best practices, and integration considerations]
+
+Focus on creating investigative context that maximizes GitHub Copilot's ability to understand, analyze, and suggest optimal solutions for these operational issues.`
+          }
+        ],
+        max_tokens: 4000,
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+
+  } catch (error) {
+    console.error('🔥 OpenAI request failed:', error);
+    throw error;
+  }
+}
+
+function generateEnhancedMockSummary(tickets) {
+  const totalTickets = tickets.length;
+  const criticalIssues = tickets.filter(t => t.fields.status.name === 'Critical').length;
+  const memoryIssues = tickets.filter(t => t.fields.summary.toLowerCase().includes('memory')).length;
+  const securityIssues = tickets.filter(t => 
+    t.fields.summary.toLowerCase().includes('security') || 
+    t.fields.summary.toLowerCase().includes('vulnerability') ||
+    t.fields.summary.toLowerCase().includes('injection')
+  ).length;
+
+  return `## Executive Summary
+
+The analysis of ${totalTickets} operational service desk tickets reveals critical infrastructure instability and security vulnerabilities that pose significant risks to system performance, data integrity, and business continuity. These operational discoveries span multiple technical domains including memory management failures, security vulnerabilities, and system resource exhaustion. Understanding and resolving these issues is crucial for maintaining system reliability and implementing effective operational improvements.
+
+### Key Operational Discoveries:
+
+**Infrastructure Stability Crisis** (${criticalIssues} Critical Issues)
+- Memory management systems failing across multiple application layers
+- Native memory leaks creating system instability outside JVM management
+- Resource exhaustion scenarios preventing normal system operations
+
+**Security Vulnerability Exposure** (${securityIssues} Security Issues)  
+- Code injection vulnerabilities in critical user-facing components
+- Insufficient input validation creating multiple attack vectors
+- Authentication and authorization bypass scenarios
+
+**System Resource Management Failures**
+- Disk space management systems failing under operational load  
+- Memory allocation failures affecting application performance
+- Network resource exhaustion preventing service communication
+
+## Investigative Issue Profiles
+
+### JSD-141: Memory mapped file leaks consuming virtual memory
+#### Investigation Context:
+The system is experiencing critical memory leaks due to improperly unmapped memory mapped files, creating a cascading failure scenario that affects virtual memory management across the entire application stack. Multiple potential root causes include incorrect file handling after use where files are opened with mmap() but never properly unmapped with munmap(), inefficient memory management in native code that interfaces with Java applications, and resource cleanup procedures that are not implemented in exception handling paths. The technical environment involves multi-tier applications with native libraries performing high-frequency file I/O operations, creating complex interactions between the virtual memory manager, file I/O subsystem, and garbage collection systems.
+
+#### Copilot Discovery Prompts:
+- How does the system manage memory mapping and deallocation processes across different native libraries, and what patterns emerge in successful vs. failing scenarios?
+- What are the comprehensive implications of not properly unmapping memory mapped files on overall system performance, scalability, and resource management?
+- Explore different strategies for efficient memory management in file operations across programming languages, considering both performance optimization and resource cleanup reliability?
+- Consider the impact of memory leaks on system performance and scalability in containerized environments where resource limits create additional constraints?
+
+#### Technical Archaeology:
+- Investigate memory mapping APIs (mmap, munmap) usage patterns throughout the codebase, identifying common patterns and potential leak sources
+- Analyze memory allocation patterns using advanced tools like Valgrind, AddressSanitizer, and memory profilers to identify leak sources
+- Check for integration of memory leak detection tools such as LeakCanary for Android, JProfiler for Java, or VisualVM for comprehensive memory analysis
+- Monitor virtual memory usage trends over time and identify bottlenecks in memory-mapped file operations using system monitoring tools
+
+#### Contextual Knowledge Web:
+- Research memory mapping techniques in modern operating systems including Linux, macOS, and Windows, understanding their trade-offs and optimal use cases
+- Explore best practices for memory management in file operations across different frameworks including Java NIO, C++ standard library, and Python memory mapping
+- Investigate common memory leak patterns and mitigation strategies in multi-language applications that combine Java with native code
+- Understand the impact of memory leaks on system stability, performance monitoring, and container orchestration in cloud environments
+
+### JSD-132: Native memory leak in JNI library integration
+#### Investigation Context:
+The system faces critical native memory leaks related to JNI library integration where memory allocated in native code exists outside JVM heap management, creating invisible resource consumption that can lead to system failure. The technical environment involves hybrid Java/native applications with C/C++ libraries integrated via JNI, where improper memory release in native code leads to memory exhaustion that bypasses standard JVM memory management and monitoring. Multiple root cause scenarios include native code not properly releasing allocated memory through malloc/free cycles, JNI reference leaks preventing garbage collection of Java objects, incorrect use of NewGlobalRef without corresponding DeleteGlobalRef calls, and native libraries with memory allocation bugs that remain invisible to JVM memory management systems.
+
+#### Copilot Discovery Prompts:
+- How does JNI handle memory allocation and deallocation between Java and native code boundaries, and what are the specific patterns that lead to memory leaks?
+- What are the comprehensive risks associated with native memory leaks in JVM environments and how do they differ from standard heap memory leaks in terms of detection and impact?
+- Explore advanced strategies for efficient memory management in JNI integrations across different platforms, considering both performance and reliability requirements?
+- Consider the impact of native memory leaks on system reliability, monitoring approaches, and debugging strategies in production environments?
+
+#### Technical Archaeology:
+- Review JNI memory management practices using specialized tools like JNI reference checking utilities and native memory profilers
+- Analyze native memory allocation patterns with Valgrind, AddressSanitizer for C/C++ code, and platform-specific debugging tools
+- Investigate JVM native memory tracking capabilities using flags like -XX:NativeMemoryTracking=detail for comprehensive analysis
+- Monitor native memory usage separate from JVM heap using system-level monitoring tools and correlate with application behavior patterns
+
+#### Contextual Knowledge Web:
+- Research JNI memory management best practices and common pitfalls in enterprise applications, including reference management and cleanup strategies
+- Explore JVM memory management strategies and garbage collection impact on native code, understanding the interaction between heap and native memory
+- Investigate common issues with native memory leaks in Java applications and advanced debugging techniques for hybrid applications
+- Understand the impact of native memory leaks on JVM stability, performance monitoring systems, and containerization in cloud deployments
+
+**Priority Recommendations:**
+
+**Immediate Actions (0-7 days):**
+1. Implement comprehensive memory leak detection across all application layers
+2. Deploy enhanced monitoring for native memory usage outside JVM heap
+3. Review and update all JNI integration points for proper resource cleanup
+
+**Strategic Initiatives (7-30 days):**
+1. Establish automated memory management testing in CI/CD pipelines
+2. Implement comprehensive system resource monitoring and alerting
+3. Conduct thorough security review of all input validation mechanisms
+
+**Long-term Architecture Improvements (30+ days):**
+1. Design comprehensive resource management framework
+2. Implement automated capacity planning and resource allocation
+3. Establish comprehensive operational excellence practices
+
+This operational issue discovery reveals systemic problems requiring immediate attention and long-term architectural improvements to ensure system stability and security.`;
 }
 
 // NLP Query endpoint with OpenAI integration
