@@ -1226,35 +1226,67 @@ async function generateAIExecutiveSummary(tickets) {
         messages: [
           {
             role: 'system',
-            content: `You are a technical documentation expert specializing in creating GitHub Copilot-friendly issue descriptions. 
+            content: `You are a senior technical architect and GitHub Copilot optimization expert. Your mission is to create comprehensive, investigative-friendly issue documentation that empowers GitHub Copilot to conduct its own deep technical analysis.
 
-Your task is to analyze Jira Service Desk tickets and generate:
+**CORE PHILOSOPHY**: Rather than providing prescriptive solutions, your documentation should give Copilot rich context to investigate and discover optimal solutions independently.
 
-1. **Executive Summary**: High-level business impact and themes
-2. **Individual Issue Descriptions**: Technical descriptions optimized for GitHub Copilot that include:
-   - Clear problem statement
-   - Technical context and root cause
-   - Suggested implementation approach
-   - Related code patterns or frameworks
-   - Keywords that help Copilot understand the domain
+Generate VERBOSE and DETAILED documentation with:
 
-Format each issue description to be immediately useful for a developer using GitHub Copilot to fix the problem. Include specific technical terms, frameworks, and implementation hints.
+1. **Executive Summary**: Comprehensive business impact analysis with technical depth
+2. **Investigative Issue Profiles**: Each issue should include extensive technical context that encourages Copilot to explore and investigate, not just follow instructions
 
-Use markdown formatting for readability.`
+**For Each Issue, Provide VERBOSE Documentation Including:**
+
+🔍 **Investigation Context**:
+   - Detailed technical environment description
+   - Multiple potential root cause scenarios
+   - Relevant system architecture context
+   - Historical patterns and similar issues
+   - Cross-system dependencies and impacts
+
+🧠 **Copilot Discovery Prompts**:
+   - Open-ended technical questions for investigation
+   - Multiple solution pathway hints (not direct instructions)
+   - Code exploration suggestions across different layers
+   - Performance, security, and scalability considerations
+
+🛠️ **Technical Archaeology**:
+   - Framework-specific investigation areas
+   - Code pattern analysis opportunities
+   - Configuration and environment factors
+   - Monitoring and diagnostic approaches
+
+🔗 **Contextual Knowledge Web**:
+   - Related technologies and frameworks
+   - Industry best practices and standards
+   - Common pitfall patterns in similar scenarios
+   - Integration points requiring investigation
+
+**VERBOSITY GUIDELINES**:
+- Use detailed explanations (3-5 sentences minimum per section)
+- Include multiple technical perspectives
+- Provide rich context for Copilot's reasoning engine
+- Encourage exploration over prescription
+- Add specific technical terminology and framework references
+
+Format using clear markdown with extensive detail that helps Copilot understand the full technical landscape for intelligent investigation.`
           },
           {
             role: 'user',
-            content: `Analyze these ${tickets.length} service desk tickets and provide an executive summary plus GitHub Copilot-optimized issue descriptions:
+            content: `As a senior technical architect, analyze these ${tickets.length} service desk tickets and create COMPREHENSIVE, INVESTIGATIVE-FRIENDLY documentation that will help GitHub Copilot conduct thorough technical investigations rather than just following prescribed solutions.
 
+**Ticket Data for Analysis:**
 ${JSON.stringify(ticketSummaries, null, 2)}
 
-Generate:
-1. Executive summary with business impact
-2. Individual issue descriptions that will help GitHub Copilot suggest relevant code fixes`
+**Required Output:**
+1. **Detailed Executive Summary** - Comprehensive business and technical impact analysis
+2. **Verbose Investigative Issue Profiles** - Rich technical context that encourages Copilot to explore multiple solution pathways and conduct independent analysis
+
+Focus on providing investigative context that empowers Copilot's reasoning capabilities rather than directive solutions.`
           }
         ],
-        max_tokens: 3000,
-        temperature: 0.3
+        max_tokens: 4000,
+        temperature: 0.2
       })
     });
 
